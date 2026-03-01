@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>生命 RPG V0.7 App版</title>
+    <style>
+        :root { 
+            --bg: #0f172a; --card: #1e293b; --text: #f8fafc; 
+            --sleep: #4ade80; --wake: #facc15; --fit: #f87171;   
+            --hp: #ef4444; --xp: #3b82f6; --border: #334155;
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            background: var(--bg); color: var(--text); 
+            margin: 0; padding: 20px 15px calc(20px + var(--safe-bottom)) 15px;
+            display: flex; flex-direction: column; align-items: center; 
+            -webkit-tap-highlight-color: transparent; /* 去除手机点击阴影 */
+            user-select: none; /* 防止长按选中文本 */
+        }
+        
+        .game-container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
+
+        /* 状态栏优化 */
+        .rpg-hud { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        .stat-box { background: var(--card); padding: 10px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
+        .stat-label { font-size: 10px; opacity: 0.6; margin-bottom: 3px; }
+        .stat-val { font-size: 18px; font-weight: 800; }
+        .bar-bg { height: 4px; background: #0f172a; border-radius: 2px; margin-top: 6px; overflow: hidden; }
+        .bar-fill { height: 100%; transition: width 0.6s ease-out; }
+        
+        /* 角色 */
+        .character-stage { text-align: center; padding: 15px 0; position: relative; }
+        .avatar { font-size: 60px; cursor: pointer; display: inline-block; transition: transform 0.1s; }
+        .avatar:active { transform: scale(1.1); }
+        .level-badge { position: absolute; top: 10px; right: 30%; background: var(--xp); font-size: 10px; padding: 2px 6px; border-radius: 8px; border: 2px solid var(--bg); }
+        .bubble { position: absolute; background: white; color: black; padding: 6px 12px; border-radius: 12px; font-size: 11px; top: -5px; left: 50%; transform: translateX(-50%); display: none; z-index: 10; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+
+        /* 任务 */
+        .task-list { display: flex; flex-direction: column; gap: 10px; }
+        .task-card { background: var(--card); padding: 12px 15px; border-radius: 12px; border-left: 4px solid #475569; display: flex; justify-content: space-between; align-items: center; }
+        .task-name { font-weight: bold; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+        
+        /* 按钮在手机上更大更易点击 */
+        .btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .btn-edit { background: #334155; color: white; }
+        .btn-done { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+        .btn-add { background: transparent; border: 1px dashed #475569; color: #94a3b8; width: 100%; padding: 12px; }
+
+        /* 日历：放到底部 */
+        .calendar-section { background: var(--card); padding: 15px; border-radius: 16px; border: 1px solid var(--border); margin-top: 10px; }
+        .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .cal-cell { aspect-ratio: 1; background: #0f172a; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid transparent; }
+        .cal-cell.today { border-color: #64748b; }
+        .cal-date { font-size: 9px; opacity: 0.3; }
+        .cal-icons { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; line-height: 1; }
+        .cal-icons span { font-size: 8px; }
+
+        /* 弹窗适配手机高度 */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+        .modal { background: var(--card); padding: 20px; border-radius: 16px; width: 100%; max-width: 300px; }
+        
+        .pop-txt { position: fixed; font-weight: bold; pointer-events: none; animation: floatUp 0.8s ease-out forwards; z-index: 200; font-size: 18px; text-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-60px); } }
+    </style>
+</head>
+<body>
+
+<div id="popups"></div>
+
+<div class="game-container">
+    <div class="rpg-hud">
+        <div class="stat-box">
+            <div class="stat-label" style="color:var(--hp)">HP</div>
+            <div id="hpVal" class="stat-val">100</div>
+            <div class="bar-bg"><div id="hpBar" class="bar-fill" style="background:var(--hp)"></div></div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label" style="color:var(--xp)">LVL</div>
+            <div id="lvlVal" class="stat-val">1</div>
+            <div class="bar-bg"><div id="xpBar" class="bar-fill" style="background:var(--xp)"></div></div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">EXP %</div>
+            <div id="expPerc" class="stat-val">0%</div>
+            <div class="bar-bg"><div id="streakBar" class="bar-fill" style="background:white"></div></div>
+        </div>
+    </div>
+
+    <div class="character-stage">
+        <div class="bubble" id="bubble">今日任务已刷新！</div>
+        <div class="avatar" id="avatar" onclick="talk()">🧙‍♂️</div>
+        <div class="level-badge" id="lvlBadge">Lv.1</div>
+    </div>
+
+    <div class="task-list" id="taskList"></div>
+    <button class="btn btn-add" onclick="openAddModal()">+ 新增自定义模组</button>
+
+    <div class="calendar-section">
+        <div class="cal-header">
+            <div onclick="changeMonth(-1)" style="padding:5px 15px; cursor:pointer">❮</div>
+            <div id="calTitle" style="font-weight:bold">2024年 3月</div>
+            <div onclick="changeMonth(1)" style="padding:5px 15px; cursor:pointer">❯</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="scoreModal" onclick="closeModal('scoreModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3 id="modalTitle" style="margin:0 0 5px 0; font-size:16px">模组评分</h3>
+        <p id="ratedNotice" style="color:var(--fit); font-size:10px; display:none; margin:0">⚠️ 今日已计分，修改不重扣HP/XP</p>
+        <input type="range" id="slider" min="0" max="100" style="width:100%; margin:20px 0" oninput="preview(this.value)">
+        <div style="font-size:32px; font-weight:800; text-align:center;" id="scoreValue">50</div>
+        <div style="display:flex; justify-content: space-between; margin:15px 0; font-weight:bold; font-size:13px" id="impactDisplay"></div>
+        <div style="display:flex; gap:10px">
+            <button class="btn btn-edit" style="flex:1" onclick="closeModal('scoreModal')">取消</button>
+            <button class="btn" style="flex:1; background:white; color:black" onclick="applyScore()">确认</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="addModal" onclick="closeModal('addModal')">
+    <div class="modal" onclick="event.stopPropagation()">
+        <h3 style="margin-top:0">新挑戰模组</h3>
+        <input type="text" id="newName" placeholder="项目名" style="width:100%; padding:12px; margin-bottom:10px; background:#0f172a; border:1px solid #334155; color:white; border-radius:8px; box-sizing:border-box">
+        <select id="newIcon" style="width:100%; padding:12px; margin-bottom:20px; background:#0f172a; border:1px solid #334155; color:white; border-radius:8px;">
+            <option value="📚">📚 学习</option><option value="🧘">🧘 冥想</option>
+            <option value="🏃">🏃 运动</option><option value="🎨">🎨 创作</option>
+            <option value="💦">💦 饮水</option><option value="💤">💤 休息</option>
+        </select>
+        <div style="display:flex; gap:10px">
+            <button class="btn btn-edit" style="flex:1" onclick="closeModal('addModal')">返回</button>
+            <button class="btn" style="flex:1; background:white; color:black" onclick="addTask()">创建</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let state = JSON.parse(localStorage.getItem('rpg_v7_save')) || {
+        hp: 100, xp: 0, lvl: 1,
+        tasks: [
+            { id: 't1', name: '早睡', icon: '😴', color: '#4ade80' },
+            { id: 't2', name: '早起', icon: '☀️', color: '#facc15' },
+            { id: 't3', name: '锻炼', icon: '🔥', color: '#f87171' }
+        ],
+        history: {}, awarded: {}
+    };
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    let viewDate = new Date();
+    let activeIdx = null;
+
+    function init() {
+        if (!state.history[todayStr]) state.history[todayStr] = {};
+        if (!state.awarded[todayStr]) state.awarded[todayStr] = [];
+        renderTasks();
+        renderCalendar();
+        updateUI();
+    }
+
+    function preview(v) {
+        document.getElementById('scoreValue').innerText = v;
+        const box = document.getElementById('impactDisplay');
+        let hp = 0, xp = Math.floor(v / 5);
+        if (v >= 80) hp = 2; else if (v < 40) hp = -5; else if (v < 60) hp = -2;
+        box.innerHTML = `<span style="color:${hp>=0?'var(--sleep)':'var(--hp)'}">HP ${hp>=0?'+':''}${hp}</span>
+                         <span style="color:var(--xp)">XP +${xp}</span>`;
+    }
+
+    function applyScore() {
+        const val = parseInt(document.getElementById('slider').value);
+        const task = state.tasks[activeIdx];
+        const isFirst = !state.awarded[todayStr].includes(task.id);
+
+        if (isFirst) {
+            let hp = 0, xp = Math.floor(val / 5);
+            if (val >= 80) hp = 2; else if (val < 40) hp = -5; else if (val < 60) hp = -2;
+            state.hp = Math.min(100, Math.max(0, state.hp + hp));
+            state.xp += xp;
+            state.awarded[todayStr].push(task.id);
+            const target = state.lvl * 100;
+            if (state.xp >= target) { state.xp -= target; state.lvl++; pop("LVL UP! ✨", "var(--xp)"); }
+            pop(`${hp>=0?'+':''}${hp} HP`, hp>=0?'var(--sleep)':'var(--hp)');
+            pop(`+${xp} XP`, "var(--xp)");
+        } else {
+            pop("更新记录", "white");
+        }
+
+        state.history[todayStr][task.id] = val;
+        save(); renderTasks(); renderCalendar(); updateUI();
+        closeModal('scoreModal');
+    }
+
+    function renderTasks() {
+        const container = document.getElementById('taskList');
+        container.innerHTML = '';
+        state.tasks.forEach((t, i) => {
+            const score = state.history[todayStr][t.id];
+            const hasAwarded = state.awarded[todayStr].includes(t.id);
+            const div = document.createElement('div');
+            div.className = 'task-card';
+            div.style.borderLeftColor = t.color;
+            div.innerHTML = `
+                <div class="task-info">
+                    <span style="font-size:20px">${t.icon}</span>
+                    <span class="task-name">${t.name}</span>
+                    <span onclick="deleteTask(${i})" style="opacity:0.2; font-size:12px; margin-left:5px">×</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px">
+                    <div style="font-weight:900; width:30px; text-align:right; font-size:14px; color:${score>=60?'var(--sleep)':'#64748b'}">${score??'--'}</div>
+                    <button class="btn ${hasAwarded?'btn-done':'btn-edit'}" onclick="openScore(${i})">${hasAwarded ? '已评' : '评分'}</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById('calGrid');
+        grid.innerHTML = '';
+        const y = viewDate.getFullYear(), m = viewDate.getMonth();
+        document.getElementById('calTitle').innerText = `${y}年 ${m + 1}月`;
+        const firstDay = new Date(y, m, 1).getDay();
+        const lastDate = new Date(y, m + 1, 0).getDate();
+        for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
+        for (let d = 1; d <= lastDate; d++) {
+            const dStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const cell = document.createElement('div');
+            cell.className = 'cal-cell' + (dStr === todayStr ? ' today' : '');
+            cell.innerHTML = `<div class="cal-date">${d}</div>`;
+            const icons = document.createElement('div');
+            icons.className = 'cal-icons';
+            if (state.history[dStr]) {
+                Object.keys(state.history[dStr]).forEach(tid => {
+                    if (state.history[dStr][tid] >= 60) {
+                        const t = state.tasks.find(x => x.id === tid);
+                        if (t) icons.innerHTML += `<span>${t.icon}</span>`;
+                    }
+                });
+            }
+            cell.appendChild(icons);
+            grid.appendChild(cell);
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('hpVal').innerText = state.hp;
+        document.getElementById('hpBar').style.width = state.hp + '%';
+        document.getElementById('lvlVal').innerText = state.lvl;
+        document.getElementById('lvlBadge').innerText = 'Lv.' + state.lvl;
+        const prog = (state.xp / (state.lvl * 100)) * 100;
+        document.getElementById('streakBar').style.width = prog + '%';
+        document.getElementById('expPerc').innerText = Math.floor(prog) + '%';
+    }
+
+    function talk() { const b = document.getElementById('bubble'); b.style.display = 'block'; setTimeout(() => b.style.display='none', 2000); }
+    function pop(t, c) {
+        const e = document.createElement('div'); e.className = 'pop-txt'; e.innerText = t; e.style.color = c;
+        e.style.left = '50%'; e.style.top = '40%'; e.style.transform = 'translateX(-50%)';
+        document.getElementById('popups').appendChild(e);
+        setTimeout(() => e.remove(), 800);
+    }
+    function openScore(i) { 
+        activeIdx = i; 
+        const hasAwarded = state.awarded[todayStr].includes(state.tasks[i].id);
+        document.getElementById('ratedNotice').style.display = hasAwarded ? 'block' : 'none';
+        document.getElementById('scoreModal').style.display = 'flex'; 
+        document.getElementById('slider').value = state.history[todayStr][state.tasks[i].id] || 50;
+        preview(document.getElementById('slider').value); 
+    }
+    function openAddModal() { document.getElementById('addModal').style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function changeMonth(d) { viewDate.setMonth(viewDate.getMonth() + d); renderCalendar(); }
+    function addTask() {
+        const name = document.getElementById('newName').value;
+        if (!name) return;
+        state.tasks.push({ id: 't'+Date.now(), name, icon: document.getElementById('newIcon').value, color: '#3b82f6' });
+        save(); renderTasks(); closeModal('addModal');
+    }
+    function deleteTask(i) { if(confirm("移除模组？")) { state.tasks.splice(i, 1); save(); renderTasks(); }}
+    function save() { localStorage.setItem('rpg_v7_save', JSON.stringify(state)); }
+    function hardReset() { if(confirm("格式化存档？")) { localStorage.clear(); location.reload(); }}
+
+    init();
+</script>
+</body>
+</html>
